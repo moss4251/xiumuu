@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Clipboard, Link, Code, Check, ArrowRight, Loader2, Sparkles, FileText, Globe } from 'lucide-react';
+import { Clipboard, Link, Code, Check, ArrowRight, Loader2, Sparkles, RefreshCw, Eye, ShieldCheck, Globe } from 'lucide-react';
 import { SAMPLE_135_CONTENT } from '../utils/sampleData';
 
 interface InputSectionProps {
@@ -13,33 +13,94 @@ export const InputSection: React.FC<InputSectionProps> = ({ onContentChange, raw
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [urlSuccessInfo, setUrlSuccessInfo] = useState<string | null>(null);
-  const pasteBoxRef = useRef<HTMLDivElement>(null);
+  const [isReadingClipboard, setIsReadingClipboard] = useState(false);
+  const [pasteNotice, setPasteNotice] = useState<string | null>(null);
 
-  // Handle rich text paste event
-  const handleRichPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+  // Handle rich text paste cleanly without contentEditable DOM mutation
+  const handleRichPaste = (e: React.ClipboardEvent<HTMLDivElement | HTMLTextAreaElement>) => {
     e.preventDefault();
-    const clipboardData = e.clipboardData;
-    const html = clipboardData.getData('text/html');
-    const text = clipboardData.getData('text/plain');
+    try {
+      const clipboardData = e.clipboardData;
+      if (!clipboardData) return;
 
-    if (html && html.trim()) {
-      onContentChange(html);
-    } else if (text && text.trim()) {
-      // Check if user pasted raw HTML code in text
-      if (text.includes('<section') || text.includes('<div') || text.includes('<p')) {
-        onContentChange(text);
-      } else {
-        // Plain text to wrapped paragraphs
-        const formatted = text
-          .split('\n')
-          .filter((line) => line.trim())
-          .map(
-            (line) =>
-              `<p style="font-size: 15px; line-height: 1.8; letter-spacing: 1.5px; color: #333; margin-bottom: 14px;">${line}</p>`
-          )
-          .join('');
-        onContentChange(formatted);
+      const html = clipboardData.getData('text/html');
+      const text = clipboardData.getData('text/plain');
+
+      if (html && html.trim()) {
+        onContentChange(html);
+        setPasteNotice(`已成功捕获 135/网页富文本排版 (${html.length} 字符)`);
+        setTimeout(() => setPasteNotice(null), 3000);
+      } else if (text && text.trim()) {
+        if (text.includes('<section') || text.includes('<div') || text.includes('<p')) {
+          onContentChange(text);
+          setPasteNotice(`已成功读取 HTML 源码 (${text.length} 字符)`);
+        } else {
+          const formatted = text
+            .split('\n')
+            .filter((line) => line.trim())
+            .map(
+              (line) =>
+                `<p style="font-size: 15px; line-height: 1.8; letter-spacing: 1.5px; color: #333; margin-bottom: 14px;">${line}</p>`
+            )
+            .join('');
+          onContentChange(formatted);
+          setPasteNotice(`已将纯文本转换为标准公众号段落`);
+        }
+        setTimeout(() => setPasteNotice(null), 3000);
       }
+    } catch (err) {
+      console.error('Paste error:', err);
+    }
+  };
+
+  // One-click read clipboard API
+  const handleReadClipboardApi = async () => {
+    setIsReadingClipboard(true);
+    try {
+      if (navigator.clipboard && navigator.clipboard.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          if (item.types.includes('text/html')) {
+            const blob = await item.getType('text/html');
+            const html = await blob.text();
+            if (html.trim()) {
+              onContentChange(html);
+              setPasteNotice(`已从剪贴板读取富文本排版 (${html.length} 字符)`);
+              setTimeout(() => setPasteNotice(null), 3000);
+              setIsReadingClipboard(false);
+              return;
+            }
+          }
+        }
+      }
+
+      // Fallback to readText
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text && text.trim()) {
+          if (text.includes('<section') || text.includes('<div') || text.includes('<p')) {
+            onContentChange(text);
+          } else {
+            const formatted = text
+              .split('\n')
+              .filter((line) => line.trim())
+              .map(
+                (line) =>
+                  `<p style="font-size: 15px; line-height: 1.8; letter-spacing: 1.5px; color: #333; margin-bottom: 14px;">${line}</p>`
+              )
+              .join('');
+            onContentChange(formatted);
+          }
+          setPasteNotice(`已从系统剪贴板读取内容 (${text.length} 字符)`);
+          setTimeout(() => setPasteNotice(null), 3000);
+        }
+      }
+    } catch (err: any) {
+      console.warn('Clipboard read failed (permission or not supported):', err);
+      setPasteNotice('请点击输入框后直接按键盘 Ctrl + V 粘贴');
+      setTimeout(() => setPasteNotice(null), 4000);
+    } finally {
+      setIsReadingClipboard(false);
     }
   };
 
@@ -80,7 +141,11 @@ export const InputSection: React.FC<InputSectionProps> = ({ onContentChange, raw
   // Load sample content
   const handleLoadSample = () => {
     onContentChange(SAMPLE_135_CONTENT, '极致排版的美学密码', '排版实验室');
+    setPasteNotice('已载入 135 典型排版示例');
+    setTimeout(() => setPasteNotice(null), 3000);
   };
+
+  const hasContent = Boolean(rawHtml && rawHtml.trim());
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
@@ -133,49 +198,86 @@ export const InputSection: React.FC<InputSectionProps> = ({ onContentChange, raw
         </div>
       </div>
 
-      {/* Tab 1: Paste Zone */}
+      {/* Tab 1: Direct Paste Zone */}
       {activeTab === 'paste' && (
         <div className="p-4 sm:p-5">
-          <div
-            ref={pasteBoxRef}
-            contentEditable
-            onPaste={handleRichPaste}
-            onInput={(e) => {
-              const html = (e.target as HTMLDivElement).innerHTML;
-              if (html) onContentChange(html);
-            }}
-            className="w-full min-h-[160px] max-h-[260px] overflow-y-auto p-4 border-2 border-dashed border-emerald-200 hover:border-emerald-400 focus:border-emerald-500 rounded-xl bg-emerald-50/20 focus:bg-white focus:outline-none transition-all text-sm text-slate-700"
-          >
-            {rawHtml ? (
-              <div
-                dangerouslySetInnerHTML={{ __html: rawHtml }}
-                className="pointer-events-none opacity-80"
-              />
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center py-6 text-slate-400 select-none pointer-events-none">
-                <div className="w-12 h-12 rounded-full bg-emerald-100/60 flex items-center justify-center text-emerald-600 mb-3">
-                  <Clipboard className="w-6 h-6" />
+          {hasContent ? (
+            /* Content successfully captured status card */
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Check className="w-5 h-5" />
                 </div>
-                <p className="text-sm font-medium text-slate-700 mb-1">
-                  在 135 编辑器选中排版后 Ctrl+C 复制，然后点击此处直接 <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 rounded text-xs shadow-xs font-mono">Ctrl + V</kbd>
-                </p>
-                <p className="text-xs text-slate-400 max-w-md">
-                  支持 135 全部样式卡片、SVG动画组件、长图文与公众号推文排版，中转站将自动捕获富文本并实时无损转成秀米格式
-                </p>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900">
+                      已就绪！当前排版内容已成功接入中转站
+                    </h3>
+                    <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">
+                      {rawHtml.length} 字符
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-1">
+                    排版已自动清洗 135 专属标记与 fieldset 边框，可在下方「秀米画布」实时预览或点击「一键复制给秀米」。
+                  </p>
+                </div>
               </div>
-            )}
-          </div>
-          {rawHtml && (
-            <div className="mt-2.5 flex items-center justify-between text-xs text-slate-500">
-              <span className="flex items-center gap-1.5 text-emerald-700 font-medium">
-                <Check className="w-3.5 h-3.5" /> 已捕获输入内容，已自动就绪转换
-              </span>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleReadClipboardApi}
+                  disabled={isReadingClipboard}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-100/80 hover:bg-emerald-200/80 rounded-lg transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isReadingClipboard ? 'animate-spin' : ''}`} />
+                  <span>读取新剪贴板</span>
+                </button>
+                <button
+                  onClick={() => onContentChange('')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                >
+                  <span>清空重选</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Empty paste catcher zone */
+            <div
+              tabIndex={0}
+              onPaste={handleRichPaste}
+              className="w-full min-h-[180px] p-6 border-2 border-dashed border-emerald-300 hover:border-emerald-500 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/10 rounded-xl bg-emerald-50/20 focus:bg-white focus:outline-none transition-all flex flex-col items-center justify-center text-center cursor-pointer group"
+            >
+              <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-3 group-hover:scale-105 transition-transform">
+                <Clipboard className="w-6 h-6" />
+              </div>
+
+              <div className="text-sm font-bold text-slate-800 mb-1">
+                点击此处，然后直接按键盘 <kbd className="px-2 py-0.5 bg-white border border-slate-300 rounded shadow-xs font-mono text-xs">Ctrl + V</kbd> / <kbd className="px-2 py-0.5 bg-white border border-slate-300 rounded shadow-xs font-mono text-xs">Cmd + V</kbd> 粘贴
+              </div>
+
+              <p className="text-xs text-slate-500 max-w-md mb-4">
+                在 135 编辑器或任意公众号文章中选中排版复制，点击此处直接粘贴。系统将安全捕获富文本并自动重构为秀米原生格式。
+              </p>
+
               <button
-                onClick={() => onContentChange('')}
-                className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleReadClipboardApi();
+                }}
+                disabled={isReadingClipboard}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
               >
-                清除重新粘贴
+                <Clipboard className="w-3.5 h-3.5" />
+                <span>{isReadingClipboard ? '正在读取剪贴板...' : '一键从剪贴板读取 (快捷通道)'}</span>
               </button>
+            </div>
+          )}
+
+          {pasteNotice && (
+            <div className="mt-2.5 text-xs text-emerald-700 font-medium flex items-center gap-1.5 animate-in fade-in duration-150">
+              <Check className="w-3.5 h-3.5" />
+              <span>{pasteNotice}</span>
             </div>
           )}
         </div>
@@ -223,7 +325,6 @@ export const InputSection: React.FC<InputSectionProps> = ({ onContentChange, raw
               </button>
             </div>
 
-            {/* Error or Success notification */}
             {urlError && (
               <div className="mt-3 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
                 {urlError}
@@ -236,7 +337,6 @@ export const InputSection: React.FC<InputSectionProps> = ({ onContentChange, raw
               </div>
             )}
 
-            {/* Hint & Fast test links */}
             <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="text-slate-400">快速体验：</span>
               <button
@@ -254,7 +354,7 @@ export const InputSection: React.FC<InputSectionProps> = ({ onContentChange, raw
         </div>
       )}
 
-      {/* Tab 3: Raw Code */}
+      {/* Tab 3: Raw Code Textarea (Safe, never crashes) */}
       {activeTab === 'code' && (
         <div className="p-4 sm:p-5">
           <div className="space-y-2">
@@ -268,7 +368,7 @@ export const InputSection: React.FC<InputSectionProps> = ({ onContentChange, raw
               value={rawHtml}
               onChange={(e) => onContentChange(e.target.value)}
               placeholder="<section class='_135editor' ...>...</section>"
-              rows={7}
+              rows={8}
               className="w-full p-3 font-mono text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-900 text-slate-200"
             />
           </div>

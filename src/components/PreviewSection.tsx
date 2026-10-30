@@ -207,13 +207,19 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({
               </div>
 
               {/* Rendered Converted HTML */}
-              <div
-                dangerouslySetInnerHTML={{ __html: convertedHtml }}
-                className="wechat-preview-body text-slate-800 text-sm leading-relaxed"
-                style={{
-                  wordBreak: 'break-word',
-                }}
-              />
+              {convertedHtml ? (
+                <div
+                  dangerouslySetInnerHTML={{ __html: convertedHtml }}
+                  className="wechat-preview-body text-slate-800 text-sm leading-relaxed"
+                  style={{
+                    wordBreak: 'break-word',
+                  }}
+                />
+              ) : (
+                <div className="py-16 text-center text-xs text-slate-400">
+                  暂无排版内容，请在上方粘贴 135 内容或输入微信推文链接
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -226,14 +232,20 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({
               <span>全部 135 标签已清洗，可直接按模块编辑</span>
             </div>
 
-            <div
-              dangerouslySetInnerHTML={{ __html: convertedHtml }}
-              className="xiumi-canvas-body"
-              style={{
-                boxSizing: 'border-box',
-                wordBreak: 'break-word',
-              }}
-            />
+            {convertedHtml ? (
+              <div
+                dangerouslySetInnerHTML={{ __html: convertedHtml }}
+                className="xiumi-canvas-body"
+                style={{
+                  boxSizing: 'border-box',
+                  wordBreak: 'break-word',
+                }}
+              />
+            ) : (
+              <div className="py-16 text-center text-xs text-slate-400">
+                暂无排版内容，请在上方粘贴 135 内容或输入微信推文链接
+              </div>
+            )}
           </div>
         )}
 
