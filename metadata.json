@@ -1,0 +1,6 @@
+{
+  "name": "秀米排版中转站 (135/微信公众号图文转秀米工具)",
+  "description": "专为微信公众号排版打造的排版中转站与抓取器，完美解决135编辑器和微信推文排版复制到秀米格式错乱、样式丢失的问题，支持一键无损转出秀米可用富文本及链接提取。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
